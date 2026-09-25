@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import ComposableArchitecture
+import Darwin
 import ScreenCaptureKit
 
 struct MenuBarEntry: Equatable, Identifiable {
@@ -62,6 +63,16 @@ extension DependencyValues {
 private final class MenuBarAccessibility {
     static let shared = MenuBarAccessibility()
     private var elements: [UUID: AXUIElement] = [:]
+
+    // This Core Graphics function was obsoleted in macOS 15, but still captures
+    // status-item windows that ScreenCaptureKit reports as offscreen on macOS 26.
+    // Resolve it at runtime so its removal leaves the supported capture path intact.
+    private typealias LegacyCapture = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
+    private static let legacyCapture: LegacyCapture? = {
+        guard let framework = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_NOW),
+              let symbol = dlsym(framework, "CGWindowListCreateImageFromArray") else { return nil }
+        return unsafeBitCast(symbol, to: LegacyCapture.self)
+    }()
 
     func scan() async -> [MenuBarEntry] {
         elements.removeAll()
@@ -169,6 +180,10 @@ private final class MenuBarAccessibility {
     }
 
     private func captureIcon(of window: SCWindow) async -> NSImage? {
+        if let image = legacyImage(of: window.windowID) {
+            return NSImage(cgImage: image, size: window.frame.size)
+        }
+
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCScreenshotConfiguration()
         configuration.width = Int(window.frame.width * 2)
@@ -188,5 +203,16 @@ private final class MenuBarAccessibility {
         } catch {
             return nil
         }
+    }
+
+    private func legacyImage(of windowID: CGWindowID) -> CGImage? {
+        guard let capture = Self.legacyCapture else { return nil }
+        var windowPointer = UnsafeRawPointer(bitPattern: UInt(windowID))
+        guard let windows = withUnsafeMutablePointer(to: &windowPointer, {
+            CFArrayCreate(kCFAllocatorDefault, $0, 1, nil)
+        }) else { return nil }
+        let options = CGWindowImageOption.boundsIgnoreFraming.rawValue
+            | CGWindowImageOption.bestResolution.rawValue
+        return capture(.null, windows, options)?.takeRetainedValue()
     }
 }
