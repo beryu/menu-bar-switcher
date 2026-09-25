@@ -5,6 +5,7 @@ struct MenuBarFeature: Reducer {
     @ObservableState
     struct State: Equatable {
         var hasAccessibilityAccess = false
+        var hasScreenCaptureAccess = false
         var isLoading = false
         var entries: [MenuBarEntry] = []
         var message: String?
@@ -12,12 +13,13 @@ struct MenuBarFeature: Reducer {
 
     enum Action {
         case appeared
-        case refreshTapped
         case accessTapped
+        case screenCaptureAccessTapped
         case settingsTapped
+        case screenCaptureSettingsTapped
         case settingsOpened(Bool)
         case entryTapped(UUID)
-        case loaded(hasAccess: Bool, entries: [MenuBarEntry])
+        case loaded(hasAccess: Bool, hasScreenCaptureAccess: Bool, entries: [MenuBarEntry])
         case pressFinished(Bool)
     }
 
@@ -26,26 +28,33 @@ struct MenuBarFeature: Reducer {
     var body: some Reducer<State, Action> {
         Reduce<State, Action> { state, action in
             switch action {
-            case .appeared, .refreshTapped:
+            case .appeared:
                 state.isLoading = true
                 state.message = nil
                 let client = menuBarClient
                 return .run { send in
                     let hasAccess = await client.isTrusted()
-                    let entries = hasAccess ? await client.scan() : []
-                    await send(.loaded(hasAccess: hasAccess, entries: entries))
+                    let hasScreenCaptureAccess = await client.hasScreenCaptureAccess()
+                    let entries = hasAccess && hasScreenCaptureAccess ? await client.scan() : []
+                    await send(.loaded(hasAccess: hasAccess, hasScreenCaptureAccess: hasScreenCaptureAccess, entries: entries))
                 }
 
-            case let .loaded(hasAccess, entries):
+            case let .loaded(hasAccess, hasScreenCaptureAccess, entries):
                 state.isLoading = false
                 state.hasAccessibilityAccess = hasAccess
+                state.hasScreenCaptureAccess = hasScreenCaptureAccess
                 state.entries = entries
                 return .none
 
             case .accessTapped:
-                state.message = "システム設定でアクセシビリティを許可した後、更新してください。"
+                state.message = "システム設定でアクセシビリティを許可した後、⋯を開き直してください。"
                 let client = menuBarClient
                 return .run { _ in await client.requestAccess() }
+
+            case .screenCaptureAccessTapped:
+                state.message = "画面収録を許可した後、⋯を開き直してください。"
+                let client = menuBarClient
+                return .run { _ in await client.requestScreenCaptureAccess() }
 
             case .settingsTapped:
                 let client = menuBarClient
@@ -54,9 +63,16 @@ struct MenuBarFeature: Reducer {
                     await send(.settingsOpened(opened))
                 }
 
+            case .screenCaptureSettingsTapped:
+                let client = menuBarClient
+                return .run { send in
+                    let opened = await client.openScreenCaptureSettings()
+                    await send(.settingsOpened(opened))
+                }
+
             case let .settingsOpened(opened):
                 if !opened {
-                    state.message = "システム設定を開けませんでした。手動でプライバシーとセキュリティ → アクセシビリティを開いてください。"
+                    state.message = "システム設定を開けませんでした。手動でプライバシーとセキュリティを開いてください。"
                 }
                 return .none
 
