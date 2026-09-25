@@ -63,35 +63,10 @@ struct ContentView: View {
             if let message = store.message {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-
-            if store.showsQuitAction {
-                Divider()
-                Toggle("Open at Login", isOn: Binding(
-                    get: { store.openAtLoginStatus?.isRegistered ?? false },
-                    set: { store.send(.openAtLoginToggled($0)) }
-                ))
-                .toggleStyle(.checkbox)
-                .disabled(store.openAtLoginStatus == nil || store.openAtLoginStatus == .unavailable || store.isUpdatingOpenAtLogin)
-                if store.openAtLoginStatus == .requiresApproval {
-                    Text("システム設定の「ログイン項目と機能拡張」で許可してください。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if store.openAtLoginStatus == .unavailable {
-                    Text("ログイン項目の状態を取得できませんでした。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Button("MenuBarSwitcher を終了") {
-                    NSApp.terminate(nil)
-                }
-            }
         }
         .padding(8)
         .frame(width: popupWidth)
         .background(PopupRightEdgeAlignment())
-        .onAppear {
-            store.send(.appeared(optionPressed: NSEvent.modifierFlags.contains(.option)))
-        }
     }
 
     private var popupWidth: CGFloat {
@@ -108,7 +83,7 @@ struct ContentView: View {
     }
 }
 
-/// Keeps the MenuBarExtra window on the screen when its content grows wider than
+/// Keeps the popover on the screen when its content grows wider than
 /// the space between the status item and the left edge of the display.
 private struct PopupRightEdgeAlignment: NSViewRepresentable {
     func makeNSView(context: Context) -> AlignmentView {

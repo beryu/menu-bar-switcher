@@ -9,13 +9,12 @@ struct MenuBarFeature: Reducer {
         var isLoading = false
         var entries: [MenuBarEntry] = []
         var message: String?
-        var showsQuitAction = false
         var openAtLoginStatus: OpenAtLoginStatus?
         var isUpdatingOpenAtLogin = false
     }
 
     enum Action {
-        case appeared(optionPressed: Bool)
+        case appeared
         case openAtLoginStatusLoaded(OpenAtLoginStatus)
         case openAtLoginToggled(Bool)
         case openAtLoginUpdateFinished(OpenAtLoginStatus, String?)
@@ -35,32 +34,22 @@ struct MenuBarFeature: Reducer {
     var body: some Reducer<State, Action> {
         Reduce<State, Action> { state, action in
             switch action {
-            case let .appeared(optionPressed):
-                state.showsQuitAction = optionPressed
-                state.openAtLoginStatus = nil
+            case .appeared:
                 state.isLoading = true
-                state.message = nil
                 let client = menuBarClient
-                let scan = Effect<Action>.run { send in
+                return .run { send in
                     let hasAccess = await client.isTrusted()
                     let hasScreenCaptureAccess = await client.hasScreenCaptureAccess()
                     let entries = hasAccess && hasScreenCaptureAccess ? await client.scan() : []
                     await send(.loaded(hasAccess: hasAccess, hasScreenCaptureAccess: hasScreenCaptureAccess, entries: entries))
                 }
-                guard optionPressed else { return scan }
-                let loginClient = openAtLoginClient
-                return .merge(scan, .run { send in
-                    await send(.openAtLoginStatusLoaded(await loginClient.status()))
-                })
 
             case let .openAtLoginStatusLoaded(status):
-                if state.showsQuitAction {
-                    state.openAtLoginStatus = status
-                }
+                state.openAtLoginStatus = status
                 return .none
 
             case let .openAtLoginToggled(enabled):
-                guard state.showsQuitAction, state.openAtLoginStatus != nil,
+                guard state.openAtLoginStatus != nil,
                       state.openAtLoginStatus != .unavailable, !state.isUpdatingOpenAtLogin else { return .none }
                 state.isUpdatingOpenAtLogin = true
                 state.message = nil
@@ -78,9 +67,7 @@ struct MenuBarFeature: Reducer {
             case let .openAtLoginUpdateFinished(status, error):
                 state.isUpdatingOpenAtLogin = false
                 state.openAtLoginStatus = status
-                if let error {
-                    state.message = "ログイン時に開く設定を変更できませんでした: \(error)"
-                }
+                state.message = error.map { "ログイン時に開く設定を変更できませんでした: \($0)" }
                 return .none
 
             case let .loaded(hasAccess, hasScreenCaptureAccess, entries):
