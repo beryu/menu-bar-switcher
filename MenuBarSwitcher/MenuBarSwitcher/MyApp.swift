@@ -1,5 +1,6 @@
 import AppKit
 import ComposableArchitecture
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -47,13 +48,12 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
 
     private func showOptionMenu(from button: NSStatusBarButton) {
         let status = OpenAtLoginClient.liveValue.status()
-        store.send(.openAtLoginStatusLoaded(status))
 
         let menu = NSMenu()
         let loginItem = NSMenuItem(title: "Open at Login", action: #selector(toggleOpenAtLogin(_:)), keyEquivalent: "")
         loginItem.target = self
         loginItem.state = status.isRegistered ? .on : .off
-        loginItem.isEnabled = status != .unavailable && !store.isUpdatingOpenAtLogin
+        loginItem.isEnabled = status != .unavailable
         menu.addItem(loginItem)
         if status == .requiresApproval || status == .unavailable {
             let explanation = status == .requiresApproval
@@ -73,7 +73,17 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleOpenAtLogin(_ item: NSMenuItem) {
-        store.send(.openAtLoginToggled(item.state != .on))
+        do {
+            let status = try OpenAtLoginClient.liveValue.setEnabled(item.state != .on)
+            if status == .requiresApproval {
+                SMAppService.openSystemSettingsLoginItems()
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "ログイン時に開く設定を変更できませんでした"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 
     @objc private func quit() {

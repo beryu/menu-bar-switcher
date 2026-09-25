@@ -1,4 +1,3 @@
-import ComposableArchitecture
 import ServiceManagement
 
 enum OpenAtLoginStatus: Equatable {
@@ -17,7 +16,7 @@ struct OpenAtLoginClient {
     var setEnabled: @MainActor (Bool) throws -> OpenAtLoginStatus
 }
 
-extension OpenAtLoginClient: DependencyKey {
+extension OpenAtLoginClient {
     static let liveValue = Self(
         status: { SMAppService.mainApp.openAtLoginStatus },
         setEnabled: { enabled in
@@ -32,20 +31,15 @@ extension OpenAtLoginClient: DependencyKey {
     )
 }
 
-extension DependencyValues {
-    var openAtLoginClient: OpenAtLoginClient {
-        get { self[OpenAtLoginClient.self] }
-        set { self[OpenAtLoginClient.self] = newValue }
-    }
-}
-
 private extension SMAppService {
     var openAtLoginStatus: OpenAtLoginStatus {
         switch status {
         case .notRegistered: .disabled
         case .enabled: .enabled
         case .requiresApproval: .requiresApproval
-        case .notFound: .unavailable
+        // A service that has never been registered can report .notFound.
+        // Registration is still possible from this state.
+        case .notFound: .disabled
         @unknown default: .unavailable
         }
     }
