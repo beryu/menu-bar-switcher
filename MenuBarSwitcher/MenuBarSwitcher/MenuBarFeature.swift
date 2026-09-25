@@ -9,10 +9,16 @@ struct MenuBarFeature: Reducer {
         var isLoading = false
         var entries: [MenuBarEntry] = []
         var message: String?
+        var showsQuitAction = false
+        var openAtLoginStatus: OpenAtLoginStatus?
+        var isUpdatingOpenAtLogin = false
     }
 
     enum Action {
-        case appeared
+        case appeared(optionPressed: Bool)
+        case openAtLoginStatusLoaded(OpenAtLoginStatus)
+        case openAtLoginToggled(Bool)
+        case openAtLoginUpdateFinished(OpenAtLoginStatus, String?)
         case accessTapped
         case screenCaptureAccessTapped
         case settingsTapped
@@ -24,20 +30,58 @@ struct MenuBarFeature: Reducer {
     }
 
     @Dependency(\.menuBarClient) var menuBarClient
+    @Dependency(\.openAtLoginClient) var openAtLoginClient
 
     var body: some Reducer<State, Action> {
         Reduce<State, Action> { state, action in
             switch action {
-            case .appeared:
+            case let .appeared(optionPressed):
+                state.showsQuitAction = optionPressed
+                state.openAtLoginStatus = nil
                 state.isLoading = true
                 state.message = nil
                 let client = menuBarClient
-                return .run { send in
+                let scan = Effect<Action>.run { send in
                     let hasAccess = await client.isTrusted()
                     let hasScreenCaptureAccess = await client.hasScreenCaptureAccess()
                     let entries = hasAccess && hasScreenCaptureAccess ? await client.scan() : []
                     await send(.loaded(hasAccess: hasAccess, hasScreenCaptureAccess: hasScreenCaptureAccess, entries: entries))
                 }
+                guard optionPressed else { return scan }
+                let loginClient = openAtLoginClient
+                return .merge(scan, .run { send in
+                    await send(.openAtLoginStatusLoaded(await loginClient.status()))
+                })
+
+            case let .openAtLoginStatusLoaded(status):
+                if state.showsQuitAction {
+                    state.openAtLoginStatus = status
+                }
+                return .none
+
+            case let .openAtLoginToggled(enabled):
+                guard state.showsQuitAction, state.openAtLoginStatus != nil,
+                      state.openAtLoginStatus != .unavailable, !state.isUpdatingOpenAtLogin else { return .none }
+                state.isUpdatingOpenAtLogin = true
+                state.message = nil
+                let client = openAtLoginClient
+                return .run { send in
+                    do {
+                        let status = try await client.setEnabled(enabled)
+                        await send(.openAtLoginUpdateFinished(status, nil))
+                    } catch {
+                        let status = await client.status()
+                        await send(.openAtLoginUpdateFinished(status, error.localizedDescription))
+                    }
+                }
+
+            case let .openAtLoginUpdateFinished(status, error):
+                state.isUpdatingOpenAtLogin = false
+                state.openAtLoginStatus = status
+                if let error {
+                    state.message = "ログイン時に開く設定を変更できませんでした: \(error)"
+                }
+                return .none
 
             case let .loaded(hasAccess, hasScreenCaptureAccess, entries):
                 state.isLoading = false
