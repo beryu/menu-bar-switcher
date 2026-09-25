@@ -1,18 +1,27 @@
 import AppKit
 import ApplicationServices
 import ComposableArchitecture
+import ScreenCaptureKit
 
 struct MenuBarEntry: Equatable, Identifiable {
     let id: UUID
     let applicationName: String
     let title: String
+    let icon: NSImage?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id && lhs.applicationName == rhs.applicationName && lhs.title == rhs.title
+    }
 }
 
 struct MenuBarClient {
     var isTrusted: @MainActor () -> Bool
     var requestAccess: @MainActor () -> Void
     var openAccessibilitySettings: @MainActor () -> Bool
-    var scan: @MainActor () -> [MenuBarEntry]
+    var hasScreenCaptureAccess: @MainActor () -> Bool
+    var requestScreenCaptureAccess: @MainActor () -> Void
+    var openScreenCaptureSettings: @MainActor () -> Bool
+    var scan: @MainActor () async -> [MenuBarEntry]
     var press: @MainActor (UUID) -> Bool
 }
 
@@ -27,7 +36,13 @@ extension MenuBarClient: DependencyKey {
             guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return false }
             return NSWorkspace.shared.open(url)
         },
-        scan: { MenuBarAccessibility.shared.scan() },
+        hasScreenCaptureAccess: { CGPreflightScreenCaptureAccess() },
+        requestScreenCaptureAccess: { _ = CGRequestScreenCaptureAccess() },
+        openScreenCaptureSettings: {
+            guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return false }
+            return NSWorkspace.shared.open(url)
+        },
+        scan: { await MenuBarAccessibility.shared.scan() },
         press: { MenuBarAccessibility.shared.press($0) }
     )
 }
@@ -44,12 +59,15 @@ private final class MenuBarAccessibility {
     static let shared = MenuBarAccessibility()
     private var elements: [UUID: AXUIElement] = [:]
 
-    func scan() -> [MenuBarEntry] {
+    func scan() async -> [MenuBarEntry] {
         elements.removeAll()
         guard AXIsProcessTrusted() else { return [] }
 
         var entries: [MenuBarEntry] = []
-        for application in NSWorkspace.shared.runningApplications where application.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+        let canCapture = CGPreflightScreenCaptureAccess()
+        for application in NSWorkspace.shared.runningApplications
+        where application.processIdentifier != ProcessInfo.processInfo.processIdentifier
+            && application.bundleIdentifier != "com.apple.controlcenter" {
             let appElement = AXUIElementCreateApplication(application.processIdentifier)
             AXUIElementSetMessagingTimeout(appElement, 0.25)
             guard let bar = elementAttribute(kAXExtrasMenuBarAttribute as CFString, of: appElement) else { continue }
@@ -62,7 +80,13 @@ private final class MenuBarAccessibility {
                     ?? "Item \(index + 1)"
                 let id = UUID()
                 elements[id] = child
-                entries.append(MenuBarEntry(id: id, applicationName: appName, title: title))
+                let icon: NSImage?
+                if canCapture, let frame = frame(of: child) {
+                    icon = await captureIcon(in: frame)
+                } else {
+                    icon = nil
+                }
+                entries.append(MenuBarEntry(id: id, applicationName: appName, title: title, icon: icon))
             }
         }
         return entries.sorted {
@@ -103,5 +127,31 @@ private final class MenuBarAccessibility {
         var names: CFArray?
         guard AXUIElementCopyActionNames(element, &names) == .success else { return [] }
         return names as? [String] ?? []
+    }
+
+    private func frame(of element: AXUIElement) -> CGRect? {
+        var positionValue: CFTypeRef?
+        var sizeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
+              let positionValue, let sizeValue,
+              CFGetTypeID(positionValue) == AXValueGetTypeID(),
+              CFGetTypeID(sizeValue) == AXValueGetTypeID() else { return nil }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0 else { return nil }
+        return CGRect(origin: position, size: size)
+    }
+
+    private func captureIcon(in frame: CGRect) async -> NSImage? {
+        do {
+            let image = try await SCScreenshotManager.captureImage(in: frame)
+            return NSImage(cgImage: image, size: frame.size)
+        } catch {
+            return nil
+        }
     }
 }

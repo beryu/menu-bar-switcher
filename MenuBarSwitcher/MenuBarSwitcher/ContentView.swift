@@ -1,3 +1,4 @@
+import AppKit
 import ComposableArchitecture
 import SwiftUI
 
@@ -6,17 +7,6 @@ struct ContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("メニューバーの項目")
-                    .font(.headline)
-                Spacer()
-                Button("更新", systemImage: "arrow.clockwise") {
-                    store.send(.refreshTapped)
-                }
-                .labelStyle(.iconOnly)
-                .help("項目を更新")
-            }
-
             if store.isLoading {
                 ProgressView("項目を探しています…")
             } else if !store.hasAccessibilityAccess {
@@ -26,6 +16,15 @@ struct ContentView: View {
                     Button("システム設定を開く") { store.send(.settingsTapped) }
                 }
                 Text("システム設定 → プライバシーとセキュリティ → アクセシビリティで許可します。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if !store.hasScreenCaptureAccess {
+                Text("メニューバーの実際のアイコンを表示するために、画面収録へのアクセスが必要です。撮影するのは検出した項目の小さな領域だけです。")
+                HStack {
+                    Button("アクセスを要求") { store.send(.screenCaptureAccessTapped) }
+                    Button("システム設定を開く") { store.send(.screenCaptureSettingsTapped) }
+                }
+                Text("システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音で許可します。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if store.entries.isEmpty {
@@ -38,16 +37,22 @@ struct ContentView: View {
                             Button {
                                 store.send(.entryTapped(entry.id))
                             } label: {
-                                VStack(spacing: 3) {
-                                    Text(entry.title).lineLimit(1)
-                                    Text(entry.applicationName)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                                Group {
+                                    if let icon = entry.icon {
+                                        Image(nsImage: icon)
+                                            .resizable()
+                                            .scaledToFit()
+                                    } else {
+                                        Image(systemName: "questionmark.square.dashed")
+                                            .resizable()
+                                            .scaledToFit()
+                                    }
                                 }
-                                .frame(minWidth: 68)
+                                .frame(width: min(max(entry.icon?.size.width ?? 24, 24), 80), height: 26)
+                                .frame(width: min(max(entry.icon?.size.width ?? 32, 32), 80), height: 28)
+                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
                             .help("\(entry.applicationName): \(entry.title)")
                             .accessibilityLabel("\(entry.applicationName)、\(entry.title)")
                         }
@@ -59,12 +64,24 @@ struct ContentView: View {
             if let message = store.message {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-            Text("項目は元の位置に残ります。押すと元のアプリのメニューが開く場合があります。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
-        .padding(14)
-        .frame(width: 420)
+        .padding(8)
+        .frame(width: popupWidth)
         .onAppear { store.send(.appeared) }
+    }
+
+    private var popupWidth: CGFloat {
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main
+        let screenWidth = screen?.frame.width ?? 420
+
+        guard store.hasAccessibilityAccess, store.hasScreenCaptureAccess, !store.entries.isEmpty else {
+            return min(420, screenWidth)
+        }
+        let iconWidth = store.entries.reduce(CGFloat.zero) { width, entry in
+            width + min(max(entry.icon?.size.width ?? 32, 32), 80)
+        }
+        let spacing = CGFloat(store.entries.count - 1) * 8
+        return min(iconWidth + spacing + 16, screenWidth)
     }
 }
