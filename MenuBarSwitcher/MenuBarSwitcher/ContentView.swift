@@ -18,15 +18,6 @@ struct ContentView: View {
                 Text("システム設定 → プライバシーとセキュリティ → アクセシビリティで許可します。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else if !store.hasScreenCaptureAccess {
-                Text("メニューバーの実際のアイコンを表示するために、画面収録へのアクセスが必要です。撮影するのは検出した項目の小さな領域だけです。")
-                HStack {
-                    Button("アクセスを要求") { store.send(.screenCaptureAccessTapped) }
-                    Button("システム設定を開く") { store.send(.screenCaptureSettingsTapped) }
-                }
-                Text("システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音で許可します。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } else if store.entries.isEmpty {
                 Text("操作できる項目が見つかりません。")
                     .foregroundStyle(.secondary)
@@ -37,19 +28,32 @@ struct ContentView: View {
                             Button {
                                 store.send(.entryTapped(entry.id))
                             } label: {
-                                Group {
-                                    if let icon = entry.icon {
-                                        Image(nsImage: icon)
-                                            .resizable()
-                                            .scaledToFit()
-                                    } else {
-                                        Image(systemName: "questionmark.square.dashed")
-                                            .resizable()
-                                            .scaledToFit()
+                                HStack(spacing: 6) {
+                                    Group {
+                                        if let icon = entry.applicationIcon {
+                                            Image(nsImage: icon)
+                                                .resizable()
+                                        } else {
+                                            Image(systemName: "app")
+                                                .resizable()
+                                        }
                                     }
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(entry.title)
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                        Text(entry.applicationName)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                .frame(width: min(max(entry.icon?.size.width ?? 24, 24), 80), height: 26)
-                                .frame(width: min(max(entry.icon?.size.width ?? 32, 32), 80), height: 28)
+                                .padding(.horizontal, 6)
+                                .frame(width: 150, height: 38)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -99,12 +103,10 @@ struct ContentView: View {
             ?? NSScreen.main
         let screenWidth = screen?.frame.width ?? 420
 
-        guard store.hasAccessibilityAccess, store.hasScreenCaptureAccess, !store.entries.isEmpty else {
+        guard store.hasAccessibilityAccess, !store.entries.isEmpty else {
             return min(420, screenWidth)
         }
-        let iconWidth = store.entries.reduce(CGFloat.zero) { width, entry in
-            width + min(max(entry.icon?.size.width ?? 32, 32), 80)
-        }
+        let iconWidth = CGFloat(store.entries.count) * 150
         let spacing = CGFloat(store.entries.count - 1) * 8
         return min(iconWidth + spacing + 16, screenWidth)
     }
