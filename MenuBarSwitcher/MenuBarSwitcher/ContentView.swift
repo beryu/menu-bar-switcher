@@ -88,6 +88,7 @@ struct ContentView: View {
         }
         .padding(8)
         .frame(width: popupWidth)
+        .background(PopupRightEdgeAlignment())
         .onAppear {
             store.send(.appeared(optionPressed: NSEvent.modifierFlags.contains(.option)))
         }
@@ -104,5 +105,59 @@ struct ContentView: View {
         let iconWidth = store.entries.reduce(CGFloat.zero) { $0 + $1.displayWidth }
         let spacing = CGFloat(store.entries.count - 1) * 8
         return min(iconWidth + spacing + 16, screenWidth)
+    }
+}
+
+/// Keeps the MenuBarExtra window on the screen when its content grows wider than
+/// the space between the status item and the left edge of the display.
+private struct PopupRightEdgeAlignment: NSViewRepresentable {
+    func makeNSView(context: Context) -> AlignmentView {
+        AlignmentView()
+    }
+
+    func updateNSView(_ view: AlignmentView, context: Context) {
+        view.scheduleAlignment()
+    }
+
+    final class AlignmentView: NSView {
+        private var resizeObserver: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+
+            if let resizeObserver {
+                NotificationCenter.default.removeObserver(resizeObserver)
+            }
+            resizeObserver = nil
+
+            guard let window else { return }
+            resizeObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didResizeNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                self?.alignToScreenRightEdge()
+            }
+            scheduleAlignment()
+        }
+
+        deinit {
+            if let resizeObserver {
+                NotificationCenter.default.removeObserver(resizeObserver)
+            }
+        }
+
+        func scheduleAlignment() {
+            DispatchQueue.main.async { [weak self] in
+                self?.alignToScreenRightEdge()
+            }
+        }
+
+        private func alignToScreenRightEdge() {
+            guard let window, let screen = window.screen else { return }
+            let x = screen.frame.maxX - window.frame.width
+            guard abs(window.frame.minX - x) > 0.5 else { return }
+            window.setFrameOrigin(NSPoint(x: x, y: window.frame.minY))
+        }
     }
 }
