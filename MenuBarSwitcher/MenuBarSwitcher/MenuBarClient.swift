@@ -1,12 +1,17 @@
 import AppKit
 import ApplicationServices
 import ComposableArchitecture
+import ScreenCaptureKit
 
 struct MenuBarEntry: Equatable, Identifiable {
     let id: UUID
     let applicationName: String
     let title: String
-    let applicationIcon: NSImage?
+    let icon: NSImage?
+
+    var displayWidth: CGFloat {
+        min(max(icon?.size.width ?? 100, 32), 160)
+    }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.applicationName == rhs.applicationName && lhs.title == rhs.title
@@ -17,6 +22,9 @@ struct MenuBarClient {
     var isTrusted: @MainActor () -> Bool
     var requestAccess: @MainActor () -> Void
     var openAccessibilitySettings: @MainActor () -> Bool
+    var hasScreenCaptureAccess: @MainActor () -> Bool
+    var requestScreenCaptureAccess: @MainActor () -> Void
+    var openScreenCaptureSettings: @MainActor () -> Bool
     var scan: @MainActor () async -> [MenuBarEntry]
     var press: @MainActor (UUID) -> Bool
 }
@@ -30,6 +38,12 @@ extension MenuBarClient: DependencyKey {
         },
         openAccessibilitySettings: {
             guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return false }
+            return NSWorkspace.shared.open(url)
+        },
+        hasScreenCaptureAccess: { CGPreflightScreenCaptureAccess() },
+        requestScreenCaptureAccess: { _ = CGRequestScreenCaptureAccess() },
+        openScreenCaptureSettings: {
+            guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return false }
             return NSWorkspace.shared.open(url)
         },
         scan: { await MenuBarAccessibility.shared.scan() },
@@ -52,6 +66,11 @@ private final class MenuBarAccessibility {
     func scan() async -> [MenuBarEntry] {
         elements.removeAll()
         guard AXIsProcessTrusted() else { return [] }
+        let content = try? await SCShareableContent.excludingDesktopWindows(
+            false, onScreenWindowsOnly: false
+        )
+        let statusWindowLevel = Int(CGWindowLevelForKey(.statusWindow))
+        let statusWindows = content?.windows.filter { $0.windowLayer == statusWindowLevel } ?? []
 
         var entries: [MenuBarEntry] = []
         for application in NSWorkspace.shared.runningApplications
@@ -69,11 +88,20 @@ private final class MenuBarAccessibility {
                     ?? "項目 \(index + 1)"
                 let id = UUID()
                 elements[id] = child
+                let frame = frame(of: child)
+                let window = frame.flatMap { frame in
+                    statusWindows.first { window in
+                        abs(window.frame.midX - frame.midX) < 4
+                            && abs(window.frame.midY - frame.midY) < 4
+                            && abs(window.frame.width - frame.width) < 17
+                    }
+                }
+                let icon: NSImage? = if let window { await captureIcon(of: window) } else { nil }
                 entries.append(MenuBarEntry(
                     id: id,
                     applicationName: appName,
                     title: title,
-                    applicationIcon: application.icon
+                    icon: icon
                 ))
             }
         }
@@ -121,5 +149,44 @@ private final class MenuBarAccessibility {
         var names: CFArray?
         guard AXUIElementCopyActionNames(element, &names) == .success else { return [] }
         return names as? [String] ?? []
+    }
+
+    private func frame(of element: AXUIElement) -> CGRect? {
+        var positionValue: CFTypeRef?
+        var sizeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
+              let positionValue, let sizeValue,
+              CFGetTypeID(positionValue) == AXValueGetTypeID(),
+              CFGetTypeID(sizeValue) == AXValueGetTypeID() else { return nil }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0 else { return nil }
+        return CGRect(origin: position, size: size)
+    }
+
+    private func captureIcon(of window: SCWindow) async -> NSImage? {
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let configuration = SCScreenshotConfiguration()
+        configuration.width = Int(window.frame.width * 2)
+        configuration.height = Int(window.frame.height * 2)
+        do {
+            let output: SCScreenshotOutput = try await withCheckedThrowingContinuation { continuation in
+                SCScreenshotManager.captureScreenshot(contentFilter: filter, configuration: configuration) { output, error in
+                    if let output {
+                        continuation.resume(returning: output)
+                    } else {
+                        continuation.resume(throwing: error ?? NSError(domain: "ScreenCaptureKit", code: -1))
+                    }
+                }
+            }
+            guard let image = output.sdrImage else { return nil }
+            return NSImage(cgImage: image, size: window.frame.size)
+        } catch {
+            return nil
+        }
     }
 }
