@@ -2,7 +2,5 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSScreenCaptureUsageDescription</key>
-    <string>メニューバー項目の実際の画像を表示するため、各項目の小さな領域を撮影します。</string>
 </dict>
 </plist>
