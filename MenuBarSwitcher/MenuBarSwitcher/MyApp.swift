@@ -40,6 +40,9 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         } else if popover.isShown {
             popover.performClose(nil)
         } else {
+            // The menu bar can use a dark appearance over a dark wallpaper even
+            // while the rest of the system is in Light mode.
+            popover.appearance = button.effectiveAppearance
             store.send(.appeared)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
