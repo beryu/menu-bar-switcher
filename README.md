@@ -1,5 +1,9 @@
 # MenuBarSwitcher
 
+<p align="center">
+  <img src="design/app-icon-source.png" alt="MenuBarSwitcher app icon" width="180">
+</p>
+
 MenuBarSwitcher is a macOS prototype that adds a “⋯” item to the menu bar. It lists menu bar items from other apps that are exposed through the Accessibility API and lets you select them. The app manages its state and actions with The Composable Architecture (TCA).
 
 ## What it currently does
