@@ -5,6 +5,7 @@ MenuBarSwitcher is a macOS prototype that adds a “⋯” item to the menu bar.
 ## What it currently does
 
 - Clicking “⋯” shows detected items in a horizontal row, excluding Control Center. Items with an Accessibility position are ordered from left to right, matching their positions in the menu bar; items without a position follow in discovery order. The app captures each original icon from the corresponding status item window. Items that are not visible on screen are also candidates for capture. The window expands to fit the items, up to the width of the active display. It aligns with the right edge of that display and scrolls horizontally if the items do not fit. Hover over an item to see its name and app, or use VoiceOver to hear them.
+- The popover follows the menu bar item's appearance when it opens, so white menu bar icons remain visible over a dark popover even when the system uses Light mode.
 - Selecting an item sends `AXPress` to that item's Accessibility element. If the item supports the action, its app opens the menu at the item's original position.
 - If Accessibility or Screen Recording permission is missing, the app explains why it needs access and how to enable it. Open “⋯” again after granting access to rescan. If no permission dialog appears, use the button that opens System Settings to go directly to the relevant settings.
 - Buttons support Tab and Space or Return. VoiceOver labels include the app and item names.
