@@ -83,7 +83,7 @@ private final class MenuBarAccessibility {
         let statusWindowLevel = Int(CGWindowLevelForKey(.statusWindow))
         let statusWindows = content?.windows.filter { $0.windowLayer == statusWindowLevel } ?? []
 
-        var entries: [MenuBarEntry] = []
+        var entries: [(entry: MenuBarEntry, x: CGFloat?)] = []
         for application in NSWorkspace.shared.runningApplications
         where application.processIdentifier != ProcessInfo.processInfo.processIdentifier
             && application.bundleIdentifier != "com.apple.controlcenter" {
@@ -100,6 +100,7 @@ private final class MenuBarAccessibility {
                 let id = UUID()
                 elements[id] = child
                 let frame = frame(of: child)
+                let positionX = frame?.minX
                 let window = frame.flatMap { frame in
                     statusWindows.first { window in
                         abs(window.frame.midX - frame.midX) < 4
@@ -108,17 +109,31 @@ private final class MenuBarAccessibility {
                     }
                 }
                 let icon: NSImage? = if let window { await captureIcon(of: window) } else { nil }
-                entries.append(MenuBarEntry(
-                    id: id,
-                    applicationName: appName,
-                    title: title,
-                    icon: icon
+                entries.append((
+                    entry: MenuBarEntry(
+                        id: id,
+                        applicationName: appName,
+                        title: title,
+                        icon: icon
+                    ),
+                    x: positionX?.isFinite == true ? positionX : nil
                 ))
             }
         }
-        return entries.sorted {
-            ($0.applicationName, $0.title) < ($1.applicationName, $1.title)
-        }
+        // AX positions use global screen coordinates. Preserve discovery order
+        // when an item has no position or two items report the same x coordinate.
+        return entries.enumerated().sorted { lhs, rhs in
+            switch (lhs.element.x, rhs.element.x) {
+            case let (left?, right?) where left != right:
+                return left < right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                return lhs.offset < rhs.offset
+            }
+        }.map { $0.element.entry }
     }
 
     func press(_ id: UUID) -> Bool {
