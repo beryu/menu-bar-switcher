@@ -20,6 +20,12 @@ struct MenuBarEntry: Equatable, Identifiable {
 }
 
 struct MenuBarClient {
+    enum PressResult {
+        case succeeded
+        case unconfirmed
+        case failed
+    }
+
     var isTrusted: @MainActor () -> Bool
     var requestAccess: @MainActor () -> Void
     var openAccessibilitySettings: @MainActor () -> Bool
@@ -27,7 +33,7 @@ struct MenuBarClient {
     var requestScreenCaptureAccess: @MainActor () -> Void
     var openScreenCaptureSettings: @MainActor () -> Bool
     var scan: @MainActor () async -> [MenuBarEntry]
-    var press: @MainActor (UUID) -> Bool
+    var press: @MainActor (UUID) -> PressResult
 }
 
 extension MenuBarClient: DependencyKey {
@@ -136,9 +142,18 @@ private final class MenuBarAccessibility {
         }.map { $0.element.entry }
     }
 
-    func press(_ id: UUID) -> Bool {
-        guard let element = elements[id], AXIsProcessTrusted() else { return false }
-        return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+    func press(_ id: UUID) -> MenuBarClient.PressResult {
+        guard let element = elements[id], AXIsProcessTrusted() else { return .failed }
+        switch AXUIElementPerformAction(element, kAXPressAction as CFString) {
+        case .success:
+            return .succeeded
+        case .cannotComplete:
+            // Opening a menu can block the target app's AX reply until the menu closes.
+            // The press may already have worked, so do not report it as a failure.
+            return .unconfirmed
+        default:
+            return .failed
+        }
     }
 
     private func elementAttribute(_ attribute: CFString, of element: AXUIElement) -> AXUIElement? {

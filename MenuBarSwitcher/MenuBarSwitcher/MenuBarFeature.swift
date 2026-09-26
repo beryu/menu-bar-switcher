@@ -21,7 +21,7 @@ struct MenuBarFeature: Reducer {
         case settingsOpened(Bool)
         case entryTapped(UUID)
         case loaded(hasAccess: Bool, hasScreenCaptureAccess: Bool, entries: [MenuBarEntry])
-        case pressFinished(Bool)
+        case pressFinished(MenuBarClient.PressResult)
     }
 
     @Dependency(\.menuBarClient) var menuBarClient
@@ -84,16 +84,19 @@ struct MenuBarFeature: Reducer {
                 state.message = nil
                 let client = menuBarClient
                 return .run { send in
-                    let succeeded = await client.press(id)
-                    await send(.pressFinished(succeeded))
+                    let result = await client.press(id)
+                    await send(.pressFinished(result))
                 }
 
-            case let .pressFinished(succeeded):
-                if succeeded {
+            case let .pressFinished(result):
+                switch result {
+                case .succeeded, .unconfirmed:
                     state.message = nil
                     state.lastTappedEntry = nil
-                } else if let entry = state.lastTappedEntry {
-                    state.message = "\(entry.applicationName)の「\(entry.title)」を操作できませんでした。元のメニューバーから操作してください。"
+                case .failed:
+                    if let entry = state.lastTappedEntry {
+                        state.message = "\(entry.applicationName)の「\(entry.title)」を操作できませんでした。元のメニューバーから操作してください。"
+                    }
                 }
                 return .none
             }

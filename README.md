@@ -17,6 +17,8 @@ Public APIs cannot physically move another app's status item into “⋯” or h
 
 An item may be absent from the list or fail to respond if it is missing from the Accessibility hierarchy, does not expose `AXPress`, or its app is unresponsive. In those cases, use the original item directly. Whether an item hidden by the notch remains in the Accessibility hierarchy depends on the app and macOS state. With an automatically hidden menu bar, an external display, or multiple displays, the app still shows only items returned by the public APIs.
 
+When `AXPress` times out, macOS cannot confirm whether the menu opened. The app does not show a failure message for that ambiguous result; if no menu appears, use the original item directly.
+
 The left-to-right order is based on reported screen coordinates. When multiple displays have menu bars, items from different displays can be interleaved by their global horizontal positions; there is no single native order across displays. Items without a reported position cannot be placed exactly.
 
 Public APIs do not expose the `NSImage` another app assigns to a status item. To capture images from hidden windows, the app looks up `CGWindowListCreateImageFromArray` at runtime, even though Apple deprecated it in macOS 15. On a physical Mac running macOS 26.6.2, it captured icons for all 15 visible and 14 hidden items tested. If a future macOS release removes the function, or an individual capture fails, the app tries ScreenCaptureKit. If that also fails, it shows the item's Accessibility name instead of substituting the app icon. If the item has no exposed name, it shows a number within that app's items.
