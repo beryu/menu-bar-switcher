@@ -26,6 +26,11 @@ Public APIs do not expose the `NSImage` another app assigns to a status item. To
 
 The reported order after this change, selecting items through the app, VoiceOver, guidance after denying permission, and interaction across display configurations have not yet been verified on a physical Mac.
 
+## Verified environment
+
+- macOS 26.6.2 (physical Mac): icon capture was verified for 15 visible and 14 hidden items. The interactions listed above remain unverified.
+- Xcode 27.0 (build 27A266a): development environment.
+
 ## Run
 
 Open `MenuBarSwitcher/MenuBarSwitcher.xcodeproj` in Xcode and run the macOS target. Request access from “⋯”, then grant the app permission in System Settings → Privacy & Security → Accessibility and Screen & System Audio Recording. If no dialog appears, use the button that opens System Settings. After granting access, restart the app and open “⋯” again. If an earlier build is running, quit it before rebuilding and launching the updated app. The in-app permission prompts are currently in Japanese.
