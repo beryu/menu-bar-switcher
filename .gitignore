@@ -4,6 +4,7 @@
 
 # Xcode build output and local user settings
 build/
+MenuBarSwitcher.dmg
 DerivedData/
 xcuserdata/
 *.xcuserstate

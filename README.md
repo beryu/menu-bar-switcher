@@ -32,6 +32,18 @@ Open `MenuBarSwitcher/MenuBarSwitcher.xcodeproj` in Xcode and run the macOS targ
 
 App Sandbox is disabled because the app accesses Accessibility elements belonging to other apps. This configuration is not suitable for Mac App Store distribution.
 
+## Create a distributable DMG
+
+Export a Developer ID-signed app from Xcode using Direct Distribution, then place `MenuBarSwitcher.app` in `build/`. Run `make package` to create a DMG for local inspection. The `create-dmg` tool uses `hdiutil` to create the disk image.
+
+To prepare the DMG for other Macs, install a Developer ID Application signing certificate, store notarization credentials with `xcrun notarytool store-credentials menu-bar-switcher`, then run:
+
+```sh
+make release-dmg SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' NOTARY_PROFILE=menu-bar-switcher
+```
+
+This creates a fresh DMG, signs it, submits it to Apple for notarization, staples the ticket, and validates the ticket. Distribute `MenuBarSwitcher.dmg` only after the command succeeds. Users must grant Accessibility and Screen Recording permission on their own Macs.
+
 API references: [NSStatusItem](https://developer.apple.com/documentation/appkit/nsstatusitem), [AXUIElement](https://developer.apple.com/documentation/applicationservices/axuielement_h), [kAXPositionAttribute](https://developer.apple.com/documentation/applicationservices/kaxpositionattribute), [AXIsProcessTrustedWithOptions](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions), [CGWindowListCreateImageFromArray](https://developer.apple.com/documentation/coregraphics/1454852-cgwindowlistcreateimagefromarray), [SCShareableContent](https://developer.apple.com/documentation/screencapturekit/scshareablecontent), and [SCScreenshotManager](https://developer.apple.com/documentation/screencapturekit/scscreenshotmanager).
 
 The approach to capturing images of hidden items was informed by the public implementation in [Lloyd](https://github.com/benwbooth/lloyd) (MIT License).
