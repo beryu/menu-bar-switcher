@@ -9,6 +9,7 @@ struct MenuBarFeature: Reducer {
         var isLoading = false
         var entries: [MenuBarEntry] = []
         var message: String?
+        var lastTappedEntry: MenuBarEntry?
     }
 
     enum Action {
@@ -30,6 +31,8 @@ struct MenuBarFeature: Reducer {
             switch action {
             case .appeared:
                 state.isLoading = true
+                state.message = nil
+                state.lastTappedEntry = nil
                 let client = menuBarClient
                 return .run { send in
                     let hasAccess = await client.isTrusted()
@@ -76,7 +79,9 @@ struct MenuBarFeature: Reducer {
                 return .none
 
             case let .entryTapped(id):
-                guard state.entries.contains(where: { $0.id == id }) else { return .none }
+                guard let entry = state.entries.first(where: { $0.id == id }) else { return .none }
+                state.lastTappedEntry = entry
+                state.message = nil
                 let client = menuBarClient
                 return .run { send in
                     let succeeded = await client.press(id)
@@ -84,7 +89,12 @@ struct MenuBarFeature: Reducer {
                 }
 
             case let .pressFinished(succeeded):
-                state.message = succeeded ? nil : "この項目を操作できませんでした。元のメニューバーから操作してください。"
+                if succeeded {
+                    state.message = nil
+                    state.lastTappedEntry = nil
+                } else if let entry = state.lastTappedEntry {
+                    state.message = "\(entry.applicationName)の「\(entry.title)」を操作できませんでした。元のメニューバーから操作してください。"
+                }
                 return .none
             }
         }
