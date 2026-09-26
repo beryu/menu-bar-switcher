@@ -1,32 +1,32 @@
 # MenuBarSwitcher
 
-macOS のメニューバーに「⋯」を表示し、アクセシビリティ API が公開する他アプリのメニューバー項目を一覧から選択する試作です。状態と操作は The Composable Architecture (TCA) で管理します。
+MenuBarSwitcher is a macOS prototype that adds a “⋯” item to the menu bar. It lists menu bar items from other apps that are exposed through the Accessibility API and lets you select them. The app manages its state and actions with The Composable Architecture (TCA).
 
-## 現在できること
+## What it currently does
 
-- 「⋯」を開くと、コントロールセンターを除く検出済みの項目を横並びに表示します。アクセシビリティで項目の位置を取得し、対応するステータス項目のウィンドウから元のアイコン画像を個別に取得します。画面に表示されていない項目も取得対象です。ウィンドウは項目が全て並ぶ幅まで広がり、操作中の画面の幅を上限にします。画面の右端に合わせて表示し、項目が収まりきらない場合は横スクロールできます。項目名とアプリ名はホバー時と VoiceOver で確認できます。
-- 項目を選ぶと、その項目自身にアクセシビリティの `AXPress` を送ります。対応する場合、元の位置でアプリのメニューが開きます。
-- アクセシビリティまたは画面収録の権限がない場合は理由と設定手順を表示します。許可後に「⋯」を開き直すと再検出します。権限ダイアログが表示されない場合は「システム設定を開く」から直接設定を開けます。
-- キーボードの Tab と Space / Return でボタンを操作でき、VoiceOver にはアプリ名と項目名を読み上げるラベルを付けています。
-- Option キーを押しながら「⋯」をクリックすると、macOS 標準のメニューに「Open at Login」と「Quit MenuBarSwitcher」が表示されます。通常の項目一覧は表示されません。
-- 「Open at Login」で、ログイン時の自動起動を切り替えられます。macOS 側の許可待ちになった場合は、システム設定の「ログイン項目と機能拡張」で許可してください。
+- Clicking “⋯” shows detected items in a horizontal row, excluding Control Center. The app uses Accessibility to find each item's position and captures its original icon from the corresponding status item window. Items that are not visible on screen are also candidates for capture. The window expands to fit the items, up to the width of the active display. It aligns with the right edge of that display and scrolls horizontally if the items do not fit. Hover over an item to see its name and app, or use VoiceOver to hear them.
+- Selecting an item sends `AXPress` to that item's Accessibility element. If the item supports the action, its app opens the menu at the item's original position.
+- If Accessibility or Screen Recording permission is missing, the app explains why it needs access and how to enable it. Open “⋯” again after granting access to rescan. If no permission dialog appears, use the button that opens System Settings to go directly to the relevant settings.
+- Buttons support Tab and Space or Return. VoiceOver labels include the app and item names.
+- Option-clicking “⋯” shows a native macOS menu with “Open at Login” and “Quit MenuBarSwitcher” instead of the item list.
+- “Open at Login” toggles automatic launch at login. If macOS is waiting for approval, allow the app in System Settings → General → Login Items & Extensions.
 
-## 制約
+## Limitations
 
-公開 API では、他アプリのステータス項目をこのアプリの「⋯」の中へ物理的に移動したり、元のメニューバーから隠したりできません。そのため、この版ではメニューバーの占有幅を減らせません。項目の複製メニューも作らず、元の項目へ操作を渡します。
+Public APIs cannot physically move another app's status item into “⋯” or hide it from the original menu bar. This version therefore does not reduce the space used by menu bar items. It does not recreate their menus; it sends actions to the original items.
 
-項目がアクセシビリティ階層にない、`AXPress` を公開しない、アプリが応答しないなどの場合は一覧に出ないか、押下に失敗します。元の項目を直接操作してください。ノッチで隠れた項目がアクセシビリティ階層に残るかは、対象アプリと macOS の状態に依存します。メニューバーの自動非表示、外部ディスプレイ、複数ディスプレイでも公開 API が返す項目のみを表示します。
+An item may be absent from the list or fail to respond if it is missing from the Accessibility hierarchy, does not expose `AXPress`, or its app is unresponsive. In those cases, use the original item directly. Whether an item hidden by the notch remains in the Accessibility hierarchy depends on the app and macOS state. With an automatically hidden menu bar, an external display, or multiple displays, the app still shows only items returned by the public APIs.
 
-公開 API は他アプリがステータス項目に設定した `NSImage` 自体を取り出せません。非表示のウィンドウ画像を得るため、macOS 15 で廃止扱いとなった `CGWindowListCreateImageFromArray` を実行時に探して使用します。macOS 26.6.2 の実機では、表示中15件と非表示14件の項目すべてから画像を取得できました。将来の macOS でこの関数が削除された場合や個別の取得に失敗した場合は ScreenCaptureKit を試し、それでも撮影できなければアクセシビリティ上の項目名を表示します。アプリアイコンには置き換えません。項目名も公開されない場合は同じアプリ内での番号を表示します。
+Public APIs do not expose the `NSImage` another app assigns to a status item. To capture images from hidden windows, the app looks up `CGWindowListCreateImageFromArray` at runtime, even though Apple deprecated it in macOS 15. On a physical Mac running macOS 26.6.2, it captured icons for all 15 visible and 14 hidden items tested. If a future macOS release removes the function, or an individual capture fails, the app tries ScreenCaptureKit. If that also fails, it shows the item's Accessibility name instead of substituting the app icon. If the item has no exposed name, it shows a number within that app's items.
 
-アプリからの項目押下、VoiceOver、権限拒否後の案内、画面構成ごとの操作は未検証です。
+Selecting items through the app, VoiceOver, guidance after denying permission, and interaction across display configurations have not yet been verified on a physical Mac.
 
-## 実行
+## Run
 
-Xcode で `MenuBarSwitcher/MenuBarSwitcher.xcodeproj` を開き、macOS ターゲットを実行します。「⋯」からアクセスを要求し、システム設定 → プライバシーとセキュリティ → アクセシビリティと画面収録とシステムオーディオ録音で許可します。ダイアログが表示されない場合は「システム設定を開く」を使ってください。許可後はアプリを再起動して「⋯」を開き直します。以前のビルドを実行中なら終了し、変更後のアプリを再ビルドして起動してください。
+Open `MenuBarSwitcher/MenuBarSwitcher.xcodeproj` in Xcode and run the macOS target. Request access from “⋯”, then grant the app permission in System Settings → Privacy & Security → Accessibility and Screen & System Audio Recording. If no dialog appears, use the button that opens System Settings. After granting access, restart the app and open “⋯” again. If an earlier build is running, quit it before rebuilding and launching the updated app. The in-app permission prompts are currently in Japanese.
 
-他アプリのアクセシビリティ要素を扱うため、App Sandbox を無効にしています。この構成は Mac App Store への配布には適しません。
+App Sandbox is disabled because the app accesses Accessibility elements belonging to other apps. This configuration is not suitable for Mac App Store distribution.
 
-API の根拠: [NSStatusItem](https://developer.apple.com/documentation/appkit/nsstatusitem)、[AXUIElement](https://developer.apple.com/documentation/applicationservices/axuielement_h)、[AXIsProcessTrustedWithOptions](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions)、[CGWindowListCreateImageFromArray](https://developer.apple.com/documentation/coregraphics/1454852-cgwindowlistcreateimagefromarray)、[SCShareableContent](https://developer.apple.com/documentation/screencapturekit/scshareablecontent)、[SCScreenshotManager](https://developer.apple.com/documentation/screencapturekit/scscreenshotmanager)。
+API references: [NSStatusItem](https://developer.apple.com/documentation/appkit/nsstatusitem), [AXUIElement](https://developer.apple.com/documentation/applicationservices/axuielement_h), [AXIsProcessTrustedWithOptions](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions), [CGWindowListCreateImageFromArray](https://developer.apple.com/documentation/coregraphics/1454852-cgwindowlistcreateimagefromarray), [SCShareableContent](https://developer.apple.com/documentation/screencapturekit/scshareablecontent), and [SCScreenshotManager](https://developer.apple.com/documentation/screencapturekit/scscreenshotmanager).
 
-非表示項目の画像取得方式は [Lloyd](https://github.com/benwbooth/lloyd) の公開実装を参考にしました（MIT License）。
+The approach to capturing images of hidden items was informed by the public implementation in [Lloyd](https://github.com/benwbooth/lloyd) (MIT License).
